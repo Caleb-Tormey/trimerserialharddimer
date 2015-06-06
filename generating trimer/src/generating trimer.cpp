@@ -149,17 +149,17 @@ int main()
 	    randomonsphere(sited, 1);
 	        for (int c = 0; c < 3; c++)
 	        {
-	            vectorlist[p + 3*c] = sited[c];
+	            vectorlist[p*3 + c] = sited[c];
 	        }
 	}
 	//Main 2 Chain Simulation Loop
 
 	//mcmax is number of 2 chain samples
-	int mcmax = 1;
+	int mcmax = 200000;
 
 	//the minimum and maximum indexed distances to place chains apart.  dr = 0.1 so this is 3.0 and 36.0 angstroms
-	int min = 1;
-	int max = 1;
+	int min = 17;
+	int max = 360;
 	// other parameters
 	int ngrid = 2048;
 	double delr = 0.1f;
@@ -176,6 +176,18 @@ int main()
 	int topmol[3] = {0,1,0};
 	// makes an array of the types of interactions between two sites on two
 	int interactionlist[9];
+	double sigmalist[3] = {sigmaA, .5f*(sigmaA + sigmaB),sigmaB};
+	//dummy solvation potential
+	double wr[3*2048];
+	double gr[3*2048];
+	for(int i = 0; i< 3*2048; i++)
+	{
+		wr[i] = 0.0f;
+	}
+	for(int i = 0; i< 3*2048; i++)
+	{
+		gr[i] = 0.0f;
+	}
 	for(int i = 0; i<3;i++)
 	{
 		for(int j = 0;j<3;j++)
@@ -208,7 +220,8 @@ int main()
 	double tempsitecoord2[3];
 	double tempcoordinates1[3*3];
 	double tempcoordinates2[3*3];
-	double distlistsqr[9];
+	double distlist[9];
+	int distindexlist[9];
 	//main MC loop
 
 	for(int i = 0; i < mcmax; i++)
@@ -227,41 +240,79 @@ int main()
 				for(int qq = 0; qq < 3; qq++)
 				{
 					tempcoordinates1[q*3 + qq] = coordlist[molchoice1 + q*3 + qq] - coordlist[molchoice1 + sitechoice1*3 + qq] ;
-					tempcoordinates2[q*3 + qq] = coordlist[molchoice2 + q*3 + qq] - coordlist[molchoice2 + sitechoice2*3 + qq] ;
-					                                                                          //+ vectorlist[vectorchoice + qq]*n*delr;
+					tempcoordinates2[q*3 + qq] = coordlist[molchoice2 + q*3 + qq] - coordlist[molchoice2 + sitechoice2*3 + qq] + vectorlist[vectorchoice + qq]*n*delr;
+
 				}
 			}
+			float totalE = 0.0f;
+			float solE = 0.0f;
+			double HSenergy;
 			for(int q = 0; q < 3; q++)
 			{
 				for(int qq = 0; qq <3; qq++)
 				{
+					double distancesqr = 0.0f;
 					for(int qqq = 0; qqq < 3; qqq++)
 					{
-						distlistsqr[q*3 + qq] += (tempcoordinates1[q*3 + qqq] - tempcoordinates2[qq*3 + qqq])*(tempcoordinates1[q*3 + qqq] - tempcoordinates2[qq*3 + qqq]);
+						distancesqr +=(tempcoordinates1[q*3 + qqq] - tempcoordinates2[qq*3 + qqq])*(tempcoordinates1[q*3 + qqq] - tempcoordinates2[qq*3 + qqq]);
 					}
+					double distance = sqrt(distancesqr);
+					distlist[q*3 + qq] = distance;
+					double disttemp = distance/delr;
+					distindexlist[q*3+ qq] = round(disttemp);
+					int rindex = ceil(disttemp);
+					double rfactor = rindex - disttemp;
+					//interpolation of solvation potential grid data
+					solE += solE + solFactor*(wr[interactionlist[q*3 + qq]*ngrid + rindex - 1] + wr[interactionlist[q*3 + qq]*ngrid + rindex - 1]);
+					if (distance >= sigmalist[interactionlist[q*3+qq]])
+					{
+						HSenergy = 0.0;
+					}
+					else
+					{
+						HSenergy = 1000000000.0;
+					}
+					totalE += HSenergy;
 				}
 			}
-			cout << "mol1 choice = " << molchoice1 << endl;
-			cout << "mol2 choice = " << molchoice2 << endl;
-			cout << "site1 choice = " << sitechoice1 << endl;
-			cout << "site2 choice = " << sitechoice2 << endl;
-			cout << "chain 1"<< endl;
-			for(int w = 0; w < 9; w++)
+			for(int q = 0; q < 9; q++)
 			{
-				cout << tempcoordinates1[w] << endl;
+				gr[interactionlist[q]*ngrid + distindexlist[q]] += exp(-(totalE + solE)/(kb*T))*n*n;
 			}
-			cout << "chain 2"<< endl;
-			for(int w = 0; w < 9; w++)
-			{
-				cout << tempcoordinates2[w] << endl;
-			}
-			cout << "distance list"<< endl;
-			for(int w = 0; w < 9; w++)
-			{
-				cout << distlistsqr[w] << endl;
-			}
+//			cout << "mol1 choice = " << molchoice1 << endl;
+//			cout << "mol2 choice = " << molchoice2 << endl;
+//			cout << "site1 choice = " << sitechoice1 << endl;
+//			cout << "site2 choice = " << sitechoice2 << endl;
+//			cout << "vector " << endl;
+//			for(int w = 0; w<3; w++)
+//			{
+//				cout << vectorlist[vectorchoice + w]<< endl;
+//			}
+//			cout << "chain 1"<< endl;
+//			for(int w = 0; w < 9; w++)
+//			{
+//				cout << tempcoordinates1[w] << endl;
+//			}
+//			cout << "chain 2"<< endl;
+//			for(int w = 0; w < 9; w++)
+//			{
+//				cout << tempcoordinates2[w] << endl;
+//			}
+//			cout << "distance list"<< endl;
+//			for(int w = 0; w < 9; w++)
+//			{
+//				cout << distlist[w] << endl;
+//			}
+//			cout << "distance list"<< endl;
+//			for(int w = 0; w < 9; w++)
+//			{
+//				cout << distindexlist[w] << endl;
+//			}
 		}
-
+//		for(int w = 0;w<9;w++)
+//		{
+//			cout << "gr["<< interactionlist[w]*ngrid + distindexlist[w] << "] = "<< gr[interactionlist[w]*ngrid + distindexlist[w]] << endl;
+//		}
 	}
 	cout << "code finished"<< endl;
 	return 0;
